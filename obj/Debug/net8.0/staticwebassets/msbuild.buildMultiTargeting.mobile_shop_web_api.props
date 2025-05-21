@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="../build/mobile_shop_web_api.props" />
+</Project>
