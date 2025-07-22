@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "EK/EUAA9CXSYtrqzs4c+dF2Gnt6EwbrgImEjo/G+TA5sTrM64R0mLRmAbGQZ/AoGmZW8RpbgvkMTa4wP2knC9A==",
+  "dgSpecHash": "pSblOxjrPbzFBwaHenoItNniANzdB0kxfW7Av0dHjZf8GkOUx7d2RfDHAw2UNu1DJYI6VeMBySDr0J0n1aiVVg==",
   "success": true,
-  "projectFilePath": "/Users/nandan/Desktop/Sem-6/Dotnet Advance/MobileShopProject/mobile_shop_web_api/mobile_shop_web_api.csproj",
+  "projectFilePath": "/Users/nandan/Desktop/Project/backend/Mobile_shop_management_web_api/mobile_shop_web_api.csproj",
   "expectedPackageFiles": [
     "/Users/nandan/.nuget/packages/azure.core/1.38.0/azure.core.1.38.0.nupkg.sha512",
     "/Users/nandan/.nuget/packages/azure.identity/1.11.4/azure.identity.1.11.4.nupkg.sha512",

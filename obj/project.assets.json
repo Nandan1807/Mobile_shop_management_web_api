@@ -4885,11 +4885,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/nandan/Desktop/Sem-6/Dotnet Advance/MobileShopProject/mobile_shop_web_api/mobile_shop_web_api.csproj",
+      "projectUniqueName": "/Users/nandan/Desktop/Project/backend/Mobile_shop_management_web_api/mobile_shop_web_api.csproj",
       "projectName": "mobile_shop_web_api",
-      "projectPath": "/Users/nandan/Desktop/Sem-6/Dotnet Advance/MobileShopProject/mobile_shop_web_api/mobile_shop_web_api.csproj",
+      "projectPath": "/Users/nandan/Desktop/Project/backend/Mobile_shop_management_web_api/mobile_shop_web_api.csproj",
       "packagesPath": "/Users/nandan/.nuget/packages/",
-      "outputPath": "/Users/nandan/Desktop/Sem-6/Dotnet Advance/MobileShopProject/mobile_shop_web_api/obj/",
+      "outputPath": "/Users/nandan/Desktop/Project/backend/Mobile_shop_management_web_api/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/Users/nandan/.nuget/NuGet/NuGet.Config"
