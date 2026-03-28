@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using mobile_shop_web_api.Data;
@@ -23,7 +24,15 @@ namespace mobile_shop_web_api.Controllers
         {
             try
             {
-                var customers = _customerRepository.GetAllCustomers();
+                var userIdClaim = User.FindFirst("UserId");
+                
+                if (userIdClaim == null)
+                {
+                    return Unauthorized("Invalid token");
+                }
+
+                int userId = int.Parse(userIdClaim.Value);
+                var customers = _customerRepository.GetAllCustomers(userId);
                 return Ok(customers);
             }
             catch (Exception ex)
@@ -64,6 +73,12 @@ namespace mobile_shop_web_api.Controllers
 
             try
             {
+                var userIdClaim = User.FindFirst("UserId");
+                if (userIdClaim != null)
+                {
+                    customer.UserId = int.Parse(userIdClaim.Value);
+                }
+
                 var result = _customerRepository.AddCustomer(customer);
                 return Ok(new { Message = result });
             }
@@ -90,6 +105,12 @@ namespace mobile_shop_web_api.Controllers
 
             try
             {
+                var userIdClaim = User.FindFirst("UserId");
+                if (userIdClaim != null)
+                {
+                    customer.UserId = int.Parse(userIdClaim.Value);
+                }
+
                 var result = _customerRepository.UpdateCustomer(customer);
                 return Ok(new { Message = result });
             }

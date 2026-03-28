@@ -14,7 +14,7 @@ namespace mobile_shop_web_api.Data
         }
 
         #region GetAllCustomers
-        public List<CustomerModel> GetAllCustomers()
+        public List<CustomerModel> GetAllCustomers(int userId)
         {
             List<CustomerModel> customerModels = new List<CustomerModel>();
             string connectionString = _configuration.GetConnectionString("ConnectionString");
@@ -26,6 +26,7 @@ namespace mobile_shop_web_api.Data
                 };
 
                 connection.Open();
+                cmd.Parameters.AddWithValue("@UserId", userId);
                 SqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
@@ -33,6 +34,7 @@ namespace mobile_shop_web_api.Data
                         new CustomerModel
                         {
                             CustomerId = Convert.ToInt32(reader["customer_id"]),
+                            UserId = Convert.ToInt32(reader["user_id"]),
                             CustomerName = reader["customer_name"].ToString(),
                             CustomerEmail = reader["customer_email"].ToString(),
                             CustomerPhone = reader["customer_phone"].ToString(),
@@ -68,6 +70,7 @@ namespace mobile_shop_web_api.Data
                     customer = new CustomerModel
                     {
                         CustomerId = Convert.ToInt32(reader["customer_id"]),
+                        UserId = Convert.ToInt32(reader["user_id"]),
                         CustomerName = reader["customer_name"].ToString(),
                         CustomerEmail = reader["customer_email"].ToString(),
                         CustomerPhone = reader["customer_phone"].ToString(),
@@ -92,6 +95,7 @@ namespace mobile_shop_web_api.Data
                 {
                     CommandType = CommandType.StoredProcedure
                 };
+                cmd.Parameters.AddWithValue("@UserId", customer.UserId);
                 cmd.Parameters.AddWithValue("@CustomerName", customer.CustomerName);
                 cmd.Parameters.AddWithValue("@CustomerEmail", customer.CustomerEmail);
                 cmd.Parameters.AddWithValue("@CustomerPhone", customer.CustomerPhone);
@@ -115,6 +119,7 @@ namespace mobile_shop_web_api.Data
                     CommandType = CommandType.StoredProcedure
                 };
                 cmd.Parameters.AddWithValue("@CustomerId", customer.CustomerId);
+                cmd.Parameters.AddWithValue("@UserId", customer.UserId);
                 cmd.Parameters.AddWithValue("@CustomerName", customer.CustomerName);
                 cmd.Parameters.AddWithValue("@CustomerEmail", customer.CustomerEmail);
                 cmd.Parameters.AddWithValue("@CustomerPhone", customer.CustomerPhone);

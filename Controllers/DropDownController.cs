@@ -54,7 +54,15 @@ namespace mobile_shop_web_api.Controllers
         {
             try
             {
-                var customers = _dropdownRepository.GetCustomersForDropdown();
+                var userIdClaim = User.FindFirst("UserId");
+                
+                if (userIdClaim == null)
+                {
+                    return Unauthorized("Invalid token");
+                }
+
+                int userId = int.Parse(userIdClaim.Value);
+                var customers = _dropdownRepository.GetCustomersForDropdown(userId);
                 return Ok(customers);
             }
             catch (Exception ex)

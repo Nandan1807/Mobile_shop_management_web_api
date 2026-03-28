@@ -80,12 +80,16 @@ GO
 IF OBJECT_ID('dbo.Customers', 'U') IS NOT NULL DROP TABLE dbo.Customers;
 CREATE TABLE Customers (
                            customer_id      INT            IDENTITY(1,1) PRIMARY KEY,
+                           user_id          INT            NOT NULL,
                            customer_name    NVARCHAR(100)  NOT NULL,
                            customer_email   NVARCHAR(100)  NOT NULL UNIQUE,
                            customer_phone   NVARCHAR(20)   NOT NULL,
                            customer_address NVARCHAR(300)  NOT NULL,
                            created_date     DATETIME       NOT NULL DEFAULT GETDATE(),
-                           modified_date    DATETIME       NULL
+                           modified_date    DATETIME       NULL,
+
+                           CONSTRAINT FK_Customers_User FOREIGN KEY (user_id)
+                               REFERENCES Users(user_id)
 );
 GO
 
@@ -204,6 +208,7 @@ GO
 
 CREATE INDEX IX_Products_CategoryId    ON Products(category_id);
 CREATE INDEX IX_Products_BrandId       ON Products(product_brand_id);
+CREATE INDEX IX_Customers_UserId       ON Customers(user_id);
 CREATE INDEX IX_Invoices_CustomerId    ON Invoices(customer_id);
 CREATE INDEX IX_Invoices_UserId        ON Invoices(user_id);
 CREATE INDEX IX_Invoices_Date          ON Invoices(date);
@@ -462,12 +467,33 @@ GO
 -- ============================================================
 
 CREATE OR ALTER PROCEDURE PR_Customers_Select_All
+@UserId INT
 AS
 BEGIN
-    SELECT customer_id, customer_name, customer_email, customer_phone,
-           customer_address, created_date, modified_date
-    FROM Customers
-    ORDER BY customer_name;
+    SET NOCOUNT ON;
+
+    DECLARE @UserRole NVARCHAR(50);
+
+    -- Get user role
+    SELECT @UserRole = role
+    FROM Users
+    WHERE user_id = @UserId;
+
+    IF @UserRole = 'Admin'
+        BEGIN
+            SELECT customer_id, user_id, customer_name, customer_email, customer_phone,
+                   customer_address, created_date, modified_date
+            FROM Customers
+            ORDER BY customer_name;
+        END
+    ELSE
+        BEGIN
+            SELECT customer_id, user_id, customer_name, customer_email, customer_phone,
+                   customer_address, created_date, modified_date
+            FROM Customers
+            WHERE user_id = @UserId
+            ORDER BY customer_name;
+        END
 END
 GO
 
@@ -475,7 +501,7 @@ CREATE OR ALTER PROCEDURE PR_Customers_Select_By_Id
 @CustomerId INT
 AS
 BEGIN
-    SELECT customer_id, customer_name, customer_email, customer_phone,
+    SELECT customer_id, user_id, customer_name, customer_email, customer_phone,
            customer_address, created_date, modified_date
     FROM Customers
     WHERE customer_id = @CustomerId;
@@ -483,19 +509,21 @@ END
 GO
 
 CREATE OR ALTER PROCEDURE PR_Customers_Insert
+    @UserId          INT,
     @CustomerName    NVARCHAR(100),
     @CustomerEmail   NVARCHAR(100),
     @CustomerPhone   NVARCHAR(20),
     @CustomerAddress NVARCHAR(300)
 AS
 BEGIN
-    INSERT INTO Customers (customer_name, customer_email, customer_phone, customer_address, created_date)
-    VALUES (@CustomerName, @CustomerEmail, @CustomerPhone, @CustomerAddress, GETDATE());
+    INSERT INTO Customers (user_id, customer_name, customer_email, customer_phone, customer_address, created_date)
+    VALUES (@UserId, @CustomerName, @CustomerEmail, @CustomerPhone, @CustomerAddress, GETDATE());
 END
 GO
 
 CREATE OR ALTER PROCEDURE PR_Customers_Update
     @CustomerId      INT,
+    @UserId          INT,
     @CustomerName    NVARCHAR(100),
     @CustomerEmail   NVARCHAR(100),
     @CustomerPhone   NVARCHAR(20),
@@ -503,7 +531,8 @@ CREATE OR ALTER PROCEDURE PR_Customers_Update
 AS
 BEGIN
     UPDATE Customers
-    SET customer_name    = @CustomerName,
+    SET user_id          = @UserId,
+        customer_name    = @CustomerName,
         customer_email   = @CustomerEmail,
         customer_phone   = @CustomerPhone,
         customer_address = @CustomerAddress,
@@ -522,11 +551,31 @@ GO
 
 -- Dropdown for Customer select lists in forms (e.g. invoice customer selection)
 CREATE OR ALTER PROCEDURE PR_Customers_Dropdown
+@UserId INT
 AS
 BEGIN
-    SELECT customer_id, customer_name
-    FROM Customers
-    ORDER BY customer_name;
+    SET NOCOUNT ON;
+
+    DECLARE @UserRole NVARCHAR(50);
+
+    -- Get user role
+    SELECT @UserRole = role
+    FROM Users
+    WHERE user_id = @UserId;
+
+    IF @UserRole = 'Admin'
+        BEGIN
+            SELECT customer_id, customer_name
+            FROM Customers
+            ORDER BY customer_name;
+        END
+    ELSE
+        BEGIN
+            SELECT customer_id, customer_name
+            FROM Customers
+            WHERE user_id = @UserId
+            ORDER BY customer_name;
+        END
 END
 GO
 
@@ -662,6 +711,13 @@ CREATE OR ALTER PROCEDURE PR_Invoices_Select_All
     @Status     NVARCHAR(50) = NULL
 AS
 BEGIN
+    DECLARE @UserRole NVARCHAR(50);
+
+    -- Get role of user
+    SELECT @UserRole = role
+    FROM Users
+    WHERE user_id = @UserId;
+
     SELECT i.invoice_id,
            i.customer_id,
            i.user_id,
@@ -673,10 +729,14 @@ BEGIN
            i.payment_status
     FROM Invoices i
              INNER JOIN Customers c ON i.customer_id = c.customer_id
-             INNER JOIN Users     u ON i.user_id     = u.user_id
-    WHERE i.user_id = @UserId
-      AND (@CustomerId IS NULL OR i.customer_id    = @CustomerId)
-      AND (@Status     IS NULL OR i.payment_status = @Status)
+             INNER JOIN Users u ON i.user_id = u.user_id
+    WHERE
+        (
+            @UserRole = 'Admin'  -- Admin gets all records
+                OR i.user_id = @UserId  -- Normal user gets only their records
+            )
+      AND (@CustomerId IS NULL OR i.customer_id = @CustomerId)
+      AND (@Status IS NULL OR i.payment_status = @Status)
     ORDER BY i.date DESC;
 END
 GO
@@ -740,10 +800,47 @@ CREATE OR ALTER PROCEDURE PR_Invoices_Delete
 @InvoiceId INT
 AS
 BEGIN
-    DELETE FROM Invoices WHERE invoice_id = @InvoiceId;
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        -- 1. Restore stock for all invoice items
+        UPDATE p
+        SET p.stock_quantity = p.stock_quantity + ii.quantity
+        FROM Products p
+                 INNER JOIN InvoiceItems ii
+                            ON p.product_id = ii.product_id
+        WHERE ii.invoice_id = @InvoiceId;
+
+        -- 2. Update product status after stock restore
+        UPDATE Products
+        SET status = CASE
+                         WHEN stock_quantity = 0 THEN 'Not Available'
+                         ELSE 'Available'
+            END
+        WHERE product_id IN (
+            SELECT product_id
+            FROM InvoiceItems
+            WHERE invoice_id = @InvoiceId
+        );
+
+        -- 3. Delete invoice items first (FK safety)
+        DELETE FROM InvoiceItems
+        WHERE invoice_id = @InvoiceId;
+
+        -- 4. Delete invoice
+        DELETE FROM Invoices
+        WHERE invoice_id = @InvoiceId;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
 END
 GO
-
 -- ============================================================
 -- STORED PROCEDURES: Invoice Items
 -- Note: procedure prefix is PR_Invoice_Items_ (with underscore)
@@ -808,28 +905,61 @@ CREATE OR ALTER PROCEDURE PR_Invoice_Items_Insert
     @Quantity   INT
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     DECLARE @UnitPrice DECIMAL(18,2);
     DECLARE @TotalPrice DECIMAL(18,2);
 
-    -- Get UnitPrice from Products table
-    SELECT @UnitPrice = product_price 
-    FROM Products 
-    WHERE product_id = @ProductId;
+    BEGIN TRY
+        BEGIN TRANSACTION;
 
-    -- Calculate TotalPrice
-    SET @TotalPrice = @UnitPrice * @Quantity;
+        -- Get Unit Price
+        SELECT @UnitPrice = product_price
+        FROM Products
+        WHERE product_id = @ProductId;
 
-    BEGIN TRANSACTION;
+        -- Check stock
+        IF NOT EXISTS (
+            SELECT 1 FROM Products
+            WHERE product_id = @ProductId
+              AND stock_quantity >= @Quantity
+        )
+            BEGIN
+                RAISERROR('Insufficient stock',16,1);
+                ROLLBACK TRANSACTION;
+                RETURN;
+            END
 
-    INSERT INTO InvoiceItems (invoice_id, product_id, quantity, unit_price, total_price)
-    VALUES (@InvoiceId, @ProductId, @Quantity, @UnitPrice, @TotalPrice);
+        SET @TotalPrice = @UnitPrice * @Quantity;
 
-    -- Update Invoice Total Amount
-    UPDATE Invoices 
-    SET total_amount = total_amount + @TotalPrice
-    WHERE invoice_id = @InvoiceId;
+        -- Insert item
+        INSERT INTO InvoiceItems (invoice_id, product_id, quantity, unit_price, total_price)
+        VALUES (@InvoiceId, @ProductId, @Quantity, @UnitPrice, @TotalPrice);
 
-    COMMIT TRANSACTION;
+        -- Update invoice total
+        UPDATE Invoices
+        SET total_amount = total_amount + @TotalPrice
+        WHERE invoice_id = @InvoiceId;
+
+        -- Reduce stock
+        UPDATE Products
+        SET stock_quantity = stock_quantity - @Quantity
+        WHERE product_id = @ProductId;
+
+        -- Update product status
+        UPDATE Products
+        SET status = CASE
+                         WHEN stock_quantity = 0 THEN 'Not Available'
+                         ELSE 'Available'
+            END
+        WHERE product_id = @ProductId;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
 END
 GO
 
@@ -840,39 +970,78 @@ CREATE OR ALTER PROCEDURE PR_Invoice_Items_Update
     @Quantity      INT
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     DECLARE @UnitPrice DECIMAL(18,2);
     DECLARE @NewTotalPrice DECIMAL(18,2);
     DECLARE @OldTotalPrice DECIMAL(18,2);
+    DECLARE @OldQuantity INT;
 
-    -- Get OldTotalPrice to adjust Invoice Total
-    SELECT @OldTotalPrice = total_price 
-    FROM InvoiceItems 
-    WHERE invoice_item_id = @InvoiceItemId;
+    BEGIN TRY
+        BEGIN TRANSACTION;
 
-    -- Get UnitPrice from Products table
-    SELECT @UnitPrice = product_price 
-    FROM Products 
-    WHERE product_id = @ProductId;
+        -- Get old values
+        SELECT
+            @OldTotalPrice = total_price,
+            @OldQuantity = quantity
+        FROM InvoiceItems
+        WHERE invoice_item_id = @InvoiceItemId;
 
-    -- Calculate NewTotalPrice
-    SET @NewTotalPrice = @UnitPrice * @Quantity;
+        -- Get price
+        SELECT @UnitPrice = product_price
+        FROM Products
+        WHERE product_id = @ProductId;
 
-    BEGIN TRANSACTION;
+        -- Stock check if increasing quantity
+        IF @Quantity > @OldQuantity
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM Products
+                    WHERE product_id = @ProductId
+                      AND stock_quantity >= (@Quantity - @OldQuantity)
+                )
+                    BEGIN
+                        RAISERROR('Insufficient stock',16,1);
+                        ROLLBACK TRANSACTION;
+                        RETURN;
+                    END
+            END
 
-    UPDATE InvoiceItems
-    SET invoice_id  = @InvoiceId,
-        product_id  = @ProductId,
-        quantity    = @Quantity,
-        unit_price  = @UnitPrice,
-        total_price = @NewTotalPrice
-    WHERE invoice_item_id = @InvoiceItemId;
+        SET @NewTotalPrice = @UnitPrice * @Quantity;
 
-    -- Adjust Invoice Total Amount
-    UPDATE Invoices 
-    SET total_amount = total_amount - @OldTotalPrice + @NewTotalPrice
-    WHERE invoice_id = @InvoiceId;
+        -- Update item
+        UPDATE InvoiceItems
+        SET invoice_id  = @InvoiceId,
+            product_id  = @ProductId,
+            quantity    = @Quantity,
+            unit_price  = @UnitPrice,
+            total_price = @NewTotalPrice
+        WHERE invoice_item_id = @InvoiceItemId;
 
-    COMMIT TRANSACTION;
+        -- Update invoice total
+        UPDATE Invoices
+        SET total_amount = total_amount - @OldTotalPrice + @NewTotalPrice
+        WHERE invoice_id = @InvoiceId;
+
+        -- Adjust stock
+        UPDATE Products
+        SET stock_quantity = stock_quantity - (@Quantity - @OldQuantity)
+        WHERE product_id = @ProductId;
+
+        -- Update product status
+        UPDATE Products
+        SET status = CASE
+                         WHEN stock_quantity = 0 THEN 'Not Available'
+                         ELSE 'Available'
+            END
+        WHERE product_id = @ProductId;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
 END
 GO
 
@@ -880,26 +1049,59 @@ CREATE OR ALTER PROCEDURE PR_Invoice_Items_Delete
 @InvoiceItemId INT
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     DECLARE @OldTotalPrice DECIMAL(18,2);
     DECLARE @InvoiceId INT;
+    DECLARE @Quantity INT;
+    DECLARE @ProductId INT;
 
-    SELECT @OldTotalPrice = total_price, @InvoiceId = invoice_id
-    FROM InvoiceItems 
-    WHERE invoice_item_id = @InvoiceItemId;
+    BEGIN TRY
+        BEGIN TRANSACTION;
 
-    BEGIN TRANSACTION;
+        -- Get existing values
+        SELECT
+            @OldTotalPrice = total_price,
+            @InvoiceId = invoice_id,
+            @Quantity = quantity,
+            @ProductId = product_id
+        FROM InvoiceItems
+        WHERE invoice_item_id = @InvoiceItemId;
 
-    DELETE FROM InvoiceItems WHERE invoice_item_id = @InvoiceItemId;
+        -- Delete item
+        DELETE FROM InvoiceItems
+        WHERE invoice_item_id = @InvoiceItemId;
 
-    -- Adjust Invoice Total Amount
-    IF @InvoiceId IS NOT NULL
-    BEGIN
-        UPDATE Invoices 
-        SET total_amount = total_amount - @OldTotalPrice
-        WHERE invoice_id = @InvoiceId;
-    END
+        -- Update invoice total
+        IF @InvoiceId IS NOT NULL
+            BEGIN
+                UPDATE Invoices
+                SET total_amount = CASE
+                                       WHEN total_amount - @OldTotalPrice < 0 THEN 0
+                                       ELSE total_amount - @OldTotalPrice
+                    END
+                WHERE invoice_id = @InvoiceId;
+            END
 
-    COMMIT TRANSACTION;
+        -- Restore stock
+        UPDATE Products
+        SET stock_quantity = stock_quantity + @Quantity
+        WHERE product_id = @ProductId;
+
+        -- Update product status
+        UPDATE Products
+        SET status = CASE
+                         WHEN stock_quantity = 0 THEN 'Not Available'
+                         ELSE 'Available'
+            END
+        WHERE product_id = @ProductId;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
 END
 GO
 
@@ -1223,10 +1425,10 @@ INSERT INTO Users (user_name, user_email, password, role, status) VALUES
                                                                       ('Admin User', 'admin@mobileshop.com', 'Admin@123', 'Admin', 'Active'),
                                                                       ('Sales User', 'sales@mobileshop.com', 'Sales@123', 'Sales', 'Active');
 
-INSERT INTO Customers (customer_name, customer_email, customer_phone, customer_address) VALUES
-                                                                                            ('Rahul Shah',  'rahul@gmail.com', '9876543210', 'Ahmedabad, Gujarat'),
-                                                                                            ('Priya Patel', 'priya@gmail.com', '9876543211', 'Surat, Gujarat'),
-                                                                                            ('Amit Mehta',  'amit@gmail.com',  '9876543212', 'Vadodara, Gujarat');
+INSERT INTO Customers (user_id, customer_name, customer_email, customer_phone, customer_address) VALUES
+                                                                                            (1, 'Rahul Shah',  'rahul@gmail.com', '9876543210', 'Ahmedabad, Gujarat'),
+                                                                                            (1, 'Priya Patel', 'priya@gmail.com', '9876543211', 'Surat, Gujarat'),
+                                                                                            (1, 'Amit Mehta',  'amit@gmail.com',  '9876543212', 'Vadodara, Gujarat');
 
 INSERT INTO Products (category_id, product_brand_id, product_name, product_price, stock_quantity, status) VALUES
                                                                                                               (1, 1, 'iPhone 15 Pro',         129900.00, 25, 'Available'),

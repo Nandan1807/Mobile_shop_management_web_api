@@ -72,7 +72,7 @@ namespace mobile_shop_web_api.Data
         #endregion
 
         #region GetCustomersForDropdown
-        public List<DropdownItemModel> GetCustomersForDropdown()
+        public List<DropdownItemModel> GetCustomersForDropdown(int userId)
         {
             List<DropdownItemModel> customers = new List<DropdownItemModel>();
             string connectionString = _configuration.GetConnectionString("ConnectionString");
@@ -85,6 +85,7 @@ namespace mobile_shop_web_api.Data
                 };
 
                 connection.Open();
+                cmd.Parameters.AddWithValue("@UserId", userId);
                 SqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
