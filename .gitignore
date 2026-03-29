@@ -4,3 +4,4 @@ obj/
 .env
 .env.mssql
 wwwroot/images/
+/mobile_shop_web_api.sln.DotSettings.user

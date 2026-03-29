@@ -84,7 +84,7 @@ namespace mobile_shop_web_api.Data
                 {
                     CommandType = CommandType.StoredProcedure
                 };
-                cmd.Parameters.AddWithValue("@customer_id", customerId);
+                cmd.Parameters.AddWithValue("@CustomerId", customerId);
 
                 connection.Open();
                 SqlDataReader reader = cmd.ExecuteReader();
@@ -118,8 +118,8 @@ namespace mobile_shop_web_api.Data
                 {
                     CommandType = CommandType.StoredProcedure
                 };
-                cmd.Parameters.AddWithValue("@start_date", startDate);
-                cmd.Parameters.AddWithValue("@end_date", endDate);
+                cmd.Parameters.AddWithValue("@StartDate", startDate);
+                cmd.Parameters.AddWithValue("@EndDate", endDate);
 
                 connection.Open();
                 SqlDataReader reader = cmd.ExecuteReader();

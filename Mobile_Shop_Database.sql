@@ -1317,91 +1317,115 @@ GO
 -- ============================================================
 
 CREATE OR ALTER PROCEDURE GetSalesTrend
-@UserId INT
+@user_id INT
 AS
 BEGIN
+    DECLARE @role VARCHAR(50);
+
+    SELECT @role = role FROM Users WHERE user_id = @user_id;
+
     SELECT FORMAT(i.date, 'MMM yyyy') AS SalesMonth,
-           SUM(i.total_amount)         AS TotalSales
+           SUM(i.total_amount)        AS TotalSales
     FROM Invoices i
-    WHERE i.user_id        = @UserId
-      AND i.payment_status = 'Paid'
+    WHERE i.payment_status = 'Paid'
+      AND (@role = 'Admin' OR i.user_id = @user_id)
     GROUP BY FORMAT(i.date, 'MMM yyyy'), YEAR(i.date), MONTH(i.date)
     ORDER BY YEAR(i.date), MONTH(i.date);
 END
 GO
 
 CREATE OR ALTER PROCEDURE GetTopSellingProducts
-@UserId INT
+@user_id INT
 AS
 BEGIN
+    DECLARE @role VARCHAR(50);
+
+    SELECT @role = role FROM Users WHERE user_id = @user_id;
+
     SELECT TOP 10
         p.product_name,
         SUM(ii.quantity) AS TotalSold
     FROM InvoiceItems ii
              INNER JOIN Products p ON ii.product_id = p.product_id
              INNER JOIN Invoices i ON ii.invoice_id = i.invoice_id
-    WHERE i.user_id        = @UserId
-      AND i.payment_status = 'Paid'
+    WHERE i.payment_status = 'Paid'
+      AND (@role = 'Admin' OR i.user_id = @user_id)
     GROUP BY p.product_name
     ORDER BY TotalSold DESC;
 END
 GO
 
 CREATE OR ALTER PROCEDURE GetSalesByCategory
-@UserId INT
+@user_id INT
 AS
 BEGIN
+    DECLARE @role VARCHAR(50);
+
+    SELECT @role = role FROM Users WHERE user_id = @user_id;
+
     SELECT c.category_name,
            SUM(ii.total_price) AS TotalRevenue
     FROM InvoiceItems ii
-             INNER JOIN Products   p ON ii.product_id = p.product_id
+             INNER JOIN Products p ON ii.product_id = p.product_id
              INNER JOIN Categories c ON p.category_id = c.category_id
-             INNER JOIN Invoices   i ON ii.invoice_id = i.invoice_id
-    WHERE i.user_id        = @UserId
-      AND i.payment_status = 'Paid'
+             INNER JOIN Invoices i ON ii.invoice_id = i.invoice_id
+    WHERE i.payment_status = 'Paid'
+      AND (@role = 'Admin' OR i.user_id = @user_id)
     GROUP BY c.category_name
     ORDER BY TotalRevenue DESC;
 END
 GO
 
 CREATE OR ALTER PROCEDURE GetDailySales
-@UserId INT
+@user_id INT
 AS
 BEGIN
+    DECLARE @role VARCHAR(50);
+
+    SELECT @role = role FROM Users WHERE user_id = @user_id;
+
     SELECT FORMAT(i.date, 'dd MMM yyyy') AS SalesDate,
-           SUM(i.total_amount)            AS TotalSales
+           SUM(i.total_amount)           AS TotalSales
     FROM Invoices i
-    WHERE i.user_id        = @UserId
-      AND i.payment_status = 'Paid'
+    WHERE i.payment_status = 'Paid'
+      AND (@role = 'Admin' OR i.user_id = @user_id)
     GROUP BY FORMAT(i.date, 'dd MMM yyyy'), CAST(i.date AS DATE)
     ORDER BY CAST(i.date AS DATE) DESC;
 END
 GO
 
 CREATE OR ALTER PROCEDURE GetTopCustomers
-@UserId INT
+@user_id INT
 AS
 BEGIN
+    DECLARE @role VARCHAR(50);
+
+    SELECT @role = role FROM Users WHERE user_id = @user_id;
+
     SELECT TOP 10
         c.customer_name,
         COUNT(i.invoice_id) AS PurchaseCount
-    FROM Invoices  i
+    FROM Invoices i
              INNER JOIN Customers c ON i.customer_id = c.customer_id
-    WHERE i.user_id        = @UserId
-      AND i.payment_status = 'Paid'
+    WHERE i.payment_status = 'Paid'
+      AND (@role = 'Admin' OR i.user_id = @user_id)
     GROUP BY c.customer_name
     ORDER BY PurchaseCount DESC;
 END
 GO
 
 CREATE OR ALTER PROCEDURE GetPaymentStatus
-@UserId INT
+@user_id INT
 AS
 BEGIN
+    DECLARE @role VARCHAR(50);
+
+    SELECT @role = role FROM Users WHERE user_id = @user_id;
+
     SELECT payment_status,
            COUNT(*) AS TotalInvoices
     FROM Invoices
-    WHERE user_id = @UserId
+    WHERE (@role = 'Admin' OR user_id = @user_id)
     GROUP BY payment_status;
 END
 GO
